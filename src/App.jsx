@@ -135,13 +135,14 @@ function AppShell({ admin, isEditor, onSignOut }) {
       flash('철거 기록을 취소했습니다.');
     } catch (e) { flash('처리에 실패했습니다: ' + e.message); }
   };
-  const addPosting = async (p) => {
+  // silent: 일괄 등록에서 N건을 등록할 때 매번 토스트가 뜨는 걸 막고, 호출 쪽에서 한 번만 요약해서 보여준다.
+  const addPosting = async (p, { silent } = {}) => {
     try {
       const created = await createPosting(p);
       setPostings((prev) => [...prev, created]);
-      flash('게시물을 등록했습니다.');
+      if (!silent) flash('게시물을 등록했습니다.');
       return true;
-    } catch (e) { flash('게시물 등록에 실패했습니다: ' + e.message); return false; }
+    } catch (e) { if (!silent) flash('게시물 등록에 실패했습니다: ' + e.message); return false; }
   };
   // 겹침 조정(기존 게시물 철거일 단축)은 새 게시물을 넣기 전에 반드시 먼저 커밋돼야 한다 —
   // DB에 겹치는 기간을 막는 exclusion 제약이 있어, 순서가 뒤바뀌면 새 게시물 삽입이 거부된다.
@@ -263,7 +264,13 @@ function AppShell({ admin, isEditor, onSignOut }) {
       {selMedia && byId[selMedia] && (
         <MediaSheet {...ctx} o={byId[selMedia]} onClose={() => setSelMedia(null)} onRemove={markRemoved} onDelete={removeMedia} />
       )}
-      {addOpen && isEditor && <AddModal {...ctx} media={media} postings={postings} onClose={() => setAddOpen(false)} onAdd={addPosting} onAdjustEnd={adjustEnd} />}
+      {addOpen && isEditor && (
+        <AddModal
+          {...ctx} media={media} postings={postings} onClose={() => setAddOpen(false)}
+          onAdd={addPosting} onAdjustEnd={adjustEnd}
+          onDone={(ok, failed) => flash(`${ok}건 등록 완료${failed ? ` · ${failed}건 실패` : ''}`)}
+        />
+      )}
       {toast && <div className="toast">{toast}</div>}
     </div>
   );

@@ -1,13 +1,27 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { iso, DAY } from '../constants.js';
+import { ZONES } from '../data/seed.js';
 
-// 게시물 등록 — 기본 시작일 자동 채움, 겹침 감지 시 확인 후 기존 게시물 종료일 자동 조정,
+// 게시물 등록 — 단일 매체 등록과 여러 매체 일괄 등록을 한 화면에서 전환한다.
+// 기본 시작일 자동 채움, 겹침 감지 시 확인 후 기존 게시물 종료일 자동 조정,
 // 이미지 업로드 시 브라우저 canvas에서 WebP 2단(view 1600px / thumb 400px) 변환 (사양서 6장)
-export default function AddModal({ T, media, postings, refDate, onClose, onAdd, onAdjustEnd }) {
+export default function AddModal({ T, types, media, postings, refDate, onClose, onAdd, onAdjustEnd, onDone }) {
+  const [mode, setMode] = useState('single'); // 'single' | 'bulk'
   const live = media.filter((m) => m.active);
+  const activeTypes = useMemo(() => types.filter((t) => t.active), [types]);
+
+  // 단일 매체 모드
   const [mediaId, setMediaId] = useState(live[0]?.id || '');
   const m = live.find((x) => x.id === mediaId);
-  const t = m ? T[m.type] : null;
+
+  // 일괄 모드 — 유형을 고르면 같은 유형의 매체 중 원하는 것을 체크한다.
+  const [typeCode, setTypeCode] = useState(activeTypes[0]?.code || '');
+  const bulkTargets = useMemo(() => (mode === 'bulk' ? media.filter((x) => x.active && x.type === typeCode) : []), [mode, media, typeCode]);
+  const [selected, setSelected] = useState(() => new Set());
+  useEffect(() => { if (mode === 'bulk') setSelected(new Set(bulkTargets.map((x) => x.id))); }, [mode, typeCode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const t = mode === 'bulk' ? T[typeCode] : (m ? T[m.type] : null);
+  const faceCount = t?.faces || 1;
 
   const [brand, setBrand] = useState('');
   const [title, setTitle] = useState('');
@@ -15,13 +29,13 @@ export default function AddModal({ T, media, postings, refDate, onClose, onAdd, 
   const [noEnd, setNoEnd] = useState(false);
   const [end, setEnd] = useState(iso(Date.parse(refDate) + 30 * DAY));
   const [drive, setDrive] = useState('');
-  const faceCount = m?.faces || 1;
   // 웨더워리어(2면)는 앞/뒤 이미지를 각각 올리고, 각 면이 어느 방향인지 수기로 입력한다.
   const [results, setResults] = useState([null, null]);
   const [busyFace, setBusyFace] = useState([false, false]);
   const [directions, setDirections] = useState(['', '']);
   const [conflict, setConflict] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState(null); // { done, total } — 일괄 등록 진행 상황
   // 설치 확인 사진(선택) — 홍보물 이미지와 별개로, 실제 현장에 부착됐다는 증빙용 한 장.
   const [installPhoto, setInstallPhoto] = useState(null);
   const [installBusy, setInstallBusy] = useState(false);
@@ -31,7 +45,7 @@ export default function AddModal({ T, media, postings, refDate, onClose, onAdd, 
   const mediaPostings = (id) => postings.filter((p) => p.mediaId === id).sort((a, b) => b.start.localeCompare(a.start));
 
   useEffect(() => {
-    if (!t) return;
+    if (mode !== 'single' || !t) return;
     setNoEnd(!!t.openEnded);
     setConflict(null);
     setResults([null, null]);
@@ -41,7 +55,7 @@ export default function AddModal({ T, media, postings, refDate, onClose, onAdd, 
     if (last) setStart(last.end ? iso(Date.parse(last.end) + DAY) : refDate);
     else setStart(refDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mediaId]);
+  }, [mediaId, mode]);
 
   const process = (f, faceIdx = 0) => {
     setBusyFace((prev) => prev.map((v, i) => (i === faceIdx ? true : v)));
@@ -86,44 +100,95 @@ export default function AddModal({ T, media, postings, refDate, onClose, onAdd, 
   const specRatio = useMemo(() => { const spec = m?.spec || t?.spec || ''; const n = spec.match(/(\d+)\D+(\d+)/); return n ? +n[1] / +n[2] : null; }, [m, t]);
   const mismatch = result && specRatio && Math.abs(+result.ratio - specRatio) / specRatio > 0.08;
 
-  const findOverlap = () => {
+  const findOverlap = (id) => {
     const newEndEff = noEnd ? '9999-12-31' : end;
-    return mediaPostings(mediaId).find((p) => {
+    return mediaPostings(id).find((p) => {
       const pEndEff = p.end || '9999-12-31';
       return start <= pEndEff && p.start <= newEndEff;
     });
   };
 
-  const doAdd = () => {
+  const buildPayload = (targetMediaId) => {
     const faceResults = faceCount === 2 ? [0, 1].map((i) => ({ direction: directions[i], result: results[i] })) : null;
-    return onAdd({
-      mediaId, brand, title, start, end: noEnd ? null : end,
+    return {
+      mediaId: targetMediaId, brand, title, start, end: noEnd ? null : end,
       driveUrl: drive || '#', singleResult: faceCount === 1 ? result : null, faceResults,
       installPhoto,
-    });
+    };
   };
 
-  const submit = async () => {
-    if (!mediaId || !brand || saving) return;
-    const ov = findOverlap();
+  const toggleOne = (id) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleAll = () => setSelected((prev) => (prev.size === bulkTargets.length ? new Set() : new Set(bulkTargets.map((x) => x.id))));
+  const bulkConflictCount = [...selected].filter((id) => findOverlap(id)).length;
+
+  const submitSingle = async () => {
+    const ov = findOverlap(mediaId);
     if (ov && !conflict) { setConflict(ov); return; }
     setSaving(true);
     if (ov && conflict) {
       const adjusted = await onAdjustEnd(ov.id, iso(Date.parse(start) - DAY));
       if (!adjusted) { setSaving(false); return; }
     }
-    const added = await doAdd();
+    const added = await onAdd(buildPayload(mediaId));
     setSaving(false);
     if (added) onClose();
   };
+
+  const submitBulk = async () => {
+    setSaving(true);
+    const ids = [...selected];
+    setProgress({ done: 0, total: ids.length });
+    let ok = 0, failed = 0;
+    for (const id of ids) {
+      const ov = findOverlap(id);
+      if (ov) {
+        const adjusted = await onAdjustEnd(ov.id, iso(Date.parse(start) - DAY));
+        if (!adjusted) { failed++; setProgress((pr) => ({ ...pr, done: pr.done + 1 })); continue; }
+      }
+      const added = await onAdd(buildPayload(id), { silent: true });
+      added ? ok++ : failed++;
+      setProgress((pr) => ({ ...pr, done: pr.done + 1 }));
+    }
+    setSaving(false);
+    onDone?.(ok, failed);
+    if (ok > 0) onClose();
+  };
+
+  const submit = () => {
+    if (!brand || saving) return;
+    if (mode === 'single') { if (mediaId) submitSingle(); }
+    else if (selected.size > 0) submitBulk();
+  };
+
+  const canSubmit = mode === 'single' ? (!!mediaId && !!brand && !conflict) : (!!brand && selected.size > 0);
 
   return (
     <div className="modal" onClick={onClose}>
       <div className="mbox" onClick={(e) => e.stopPropagation()}>
         <div className="mhead"><b>게시물 등록</b><button onClick={onClose}>✕</button></div>
         <div className="mbody">
-          <label className="fld"><span>매체</span><select value={mediaId} onChange={(e) => setMediaId(e.target.value)}>{live.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-          {t && <p className="hint">{t.label} · 규격 <b>{m.spec || t.spec}</b> · {m.faces}면{t.movable ? ' · 이동형' : ''}</p>}
+          <div className="seg">
+            <button className={mode === 'single' ? 'on' : ''} disabled={saving} onClick={() => setMode('single')}>단일 매체</button>
+            <button className={mode === 'bulk' ? 'on' : ''} disabled={saving} onClick={() => setMode('bulk')}>여러 매체 한 번에</button>
+          </div>
+
+          {mode === 'single' ? (
+            <>
+              <label className="fld"><span>매체</span><select value={mediaId} onChange={(e) => setMediaId(e.target.value)}>{live.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+              {t && <p className="hint">{t.label} · 규격 <b>{m.spec || t.spec}</b> · {m.faces}면{t.movable ? ' · 이동형' : ''}</p>}
+            </>
+          ) : (
+            <>
+              <p className="hint">업체명·기간·이미지를 한 번만 입력하고, 같은 유형의 매체 중 원하는 곳을 체크하면 그 개수만큼 게시물이 한 번에 등록됩니다.</p>
+              <label className="fld"><span>매체 유형</span>
+                <select value={typeCode} onChange={(e) => setTypeCode(e.target.value)}>
+                  {activeTypes.map((x) => <option key={x.code} value={x.code}>{x.label}</option>)}
+                </select>
+              </label>
+              {t && <p className="hint">{t.label} · 규격 <b>{t.spec}</b> · {t.faces}면 · 대상 {bulkTargets.length}개</p>}
+            </>
+          )}
+
           <label className="fld"><span>업체명</span><input value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="예: 나이키" /></label>
           <label className="fld"><span>내용 (선택)</span><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="비워두면 업체명이 그대로 들어갑니다" /></label>
           <div className="fld2">
@@ -141,12 +206,15 @@ export default function AddModal({ T, media, postings, refDate, onClose, onAdd, 
           {installBusy && <p className="hint">변환 중…</p>}
           {installPhoto && <div className="rprev"><img src={installPhoto.url} alt="" /><i className="sub">설치 확인 사진</i></div>}
 
-          {conflict && (
+          {mode === 'single' && conflict && (
             <div className="conflictbox">
               겹치는 게시물이 있습니다 — <b>{conflict.brand}</b> ({conflict.start} ~ {conflict.end || '미정'}).<br />
               그대로 진행하면 이 게시물의 철거 예정일이 <b>{iso(Date.parse(start) - DAY)}</b>로 조정됩니다.
-              <div className="conflictbtns"><button className="mini" disabled={saving} onClick={() => setConflict(null)}>취소</button><button className="mini ok" disabled={saving} onClick={submit}>{saving ? '저장 중…' : '그대로 진행'}</button></div>
+              <div className="conflictbtns"><button className="mini" disabled={saving} onClick={() => setConflict(null)}>취소</button><button className="mini ok" disabled={saving} onClick={submitSingle}>{saving ? '저장 중…' : '그대로 진행'}</button></div>
             </div>
+          )}
+          {mode === 'bulk' && bulkConflictCount > 0 && (
+            <p className="warnbox">⚠ 선택된 매체 중 {bulkConflictCount}곳은 이미 겹치는 게시물이 있습니다 — 그대로 진행하면 기존 게시물의 철거 예정일이 자동으로 단축됩니다.</p>
           )}
 
           {faceCount === 2 ? (
@@ -177,7 +245,7 @@ export default function AddModal({ T, media, postings, refDate, onClose, onAdd, 
             <>
               <div className="drop">
                 <input type="file" accept="image/*" onChange={(e) => e.target.files[0] && process(e.target.files[0])} />
-                <p>이미지를 올리면 브라우저에서 <b>WebP 2단</b>(1600px / 400px)으로 변환합니다. 원본은 업로드되지 않습니다.</p>
+                <p>이미지를 올리면 브라우저에서 <b>WebP 2단</b>(1600px / 400px)으로 변환합니다. 원본은 업로드되지 않습니다.{mode === 'bulk' ? ' (선택 사항, 모든 대상에 동일 적용)' : ''}</p>
               </div>
               {busy && <p className="hint">변환 중…</p>}
               {result && (
@@ -192,8 +260,35 @@ export default function AddModal({ T, media, postings, refDate, onClose, onAdd, 
               )}
             </>
           )}
+
+          {mode === 'bulk' && (
+            <div className="fld" style={{ marginTop: 8 }}>
+              <span>대상 매체 ({selected.size}/{bulkTargets.length} 선택)</span>
+              <div className="medialist">
+                <label className="medialist-item medialist-all">
+                  <input type="checkbox" checked={bulkTargets.length > 0 && selected.size === bulkTargets.length} onChange={toggleAll} />
+                  <b>전체 선택/해제</b>
+                </label>
+                {bulkTargets.map((x) => (
+                  <label key={x.id} className="medialist-item">
+                    <input type="checkbox" checked={selected.has(x.id)} onChange={() => toggleOne(x.id)} />
+                    <span>{x.name}</span>
+                    <i className="sub">{ZONES[x.zone]?.label || x.zone}</i>
+                    {findOverlap(x.id) && <i className="conflicttag">겹침</i>}
+                  </label>
+                ))}
+                {bulkTargets.length === 0 && <p className="sub" style={{ padding: '8px 0' }}>이 유형의 매체가 없습니다.</p>}
+              </div>
+            </div>
+          )}
         </div>
-        <div className="mfoot"><button className="btn" disabled={saving} onClick={onClose}>취소</button><button className="btn primary" onClick={submit} disabled={!brand || !!conflict || saving}>{saving ? '저장 중…' : '등록'}</button></div>
+        <div className="mfoot">
+          {mode === 'bulk' && <span className="sub" style={{ marginRight: 'auto' }}>{saving && progress ? `등록 중… ${progress.done}/${progress.total}` : ''}</span>}
+          <button className="btn" disabled={saving} onClick={onClose}>취소</button>
+          <button className="btn primary" onClick={submit} disabled={!canSubmit || saving}>
+            {saving ? '저장 중…' : mode === 'bulk' ? `${selected.size}건 등록` : '등록'}
+          </button>
+        </div>
       </div>
     </div>
   );
