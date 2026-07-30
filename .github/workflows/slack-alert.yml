@@ -17,6 +17,11 @@ jobs:
       - run: npm ci --omit=dev
       - id: weekday
         run: echo "is_monday=$(TZ=Asia/Seoul date +%u)" >> "$GITHUB_OUTPUT"
+      # 사양서 4.2 — 알람 조회 직전에 자동 철거 처리부터 실행해야 기록 누락이 "만료"로 잘못 잡히지 않는다.
+      - run: node scripts/auto-remove.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       - run: node scripts/slack-alert.mjs
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
