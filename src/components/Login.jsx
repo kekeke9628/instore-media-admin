@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabaseClient.js';
 
+const DOMAINS = ['gmail.com', 'naver.com', 'premiumoutlets.co.kr'];
+const CUSTOM = '__custom__';
+
 export default function Login({ initialError }) {
-  const [email, setEmail] = useState('');
+  const [local, setLocal] = useState('');
+  const [domain, setDomain] = useState(DOMAINS[0]);
+  const [customDomain, setCustomDomain] = useState('');
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState(
     initialError ? '로그인 링크가 만료되었거나 이미 사용되었습니다. 새 링크를 요청하세요. (' + initialError + ')' : ''
   );
+
+  const email = local && `${local}@${domain === CUSTOM ? customDomain : domain}`;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -38,7 +45,38 @@ export default function Login({ initialError }) {
           <form onSubmit={submit} className="authform">
             <label className="fld">
               <span>직원 이메일</span>
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" />
+              <div className="emailfld">
+                <input
+                  type="text"
+                  required
+                  value={local}
+                  onChange={(e) => setLocal(e.target.value)}
+                  placeholder="name"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                />
+                <span className="at">@</span>
+                {domain === CUSTOM ? (
+                  <input
+                    type="text"
+                    required
+                    value={customDomain}
+                    onChange={(e) => setCustomDomain(e.target.value)}
+                    placeholder="도메인 직접 입력"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                  />
+                ) : (
+                  <select value={domain} onChange={(e) => setDomain(e.target.value)}>
+                    {DOMAINS.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                    <option value={CUSTOM}>직접 입력</option>
+                  </select>
+                )}
+              </div>
             </label>
             {error && <p className="warnbox">{error}</p>}
             <button className="btn primary wide" type="submit" disabled={busy}>
