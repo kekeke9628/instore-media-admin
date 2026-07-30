@@ -38,7 +38,7 @@ export default function Login({ initialError }) {
           <form onSubmit={submit} className="authform">
             <label className="fld">
               <span>직원 이메일</span>
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@premiumoutlets.co.kr" />
+              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" />
             </label>
             {error && <p className="warnbox">{error}</p>}
             <button className="btn primary wide" type="submit" disabled={busy}>
