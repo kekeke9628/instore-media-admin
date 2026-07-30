@@ -1,0 +1,59 @@
+import React from 'react';
+import { LONG_OPEN, contentOf } from '../constants.js';
+import { ZONES } from '../data/seed.js';
+
+export default function MediaSheet({ T, o, isEditor, onClose, onRemove, onDelete }) {
+  const t = T[o.type];
+  const cur = o.overdue || o.current;
+  const past = o.history.filter((p) => p.id !== cur?.id).slice().reverse();
+  const zoneLabel = ZONES[o.zone]?.label || o.zone;
+  return (
+    <div className="sheet">
+      <div className="shead"><div><b>{o.name}</b><i>{zoneLabel} · {t.label} · {o.spec || t.spec} · {o.faces}면</i></div><button onClick={onClose}>✕</button></div>
+      <div className="sbody">
+        <h4>{o.overdue ? '지금 걸려 있는 것 (만료)' : o.open ? '지금 걸려 있는 것 (미정)' : '현재 게시물'}</h4>
+        {o.overdue && <p className="warnbox">{o.overdue.end}에 철거 예정이었습니다. <b>+{o.overdueDays}일</b> 경과했습니다.</p>}
+        {o.open && <p className="okbox">종료일이 정해지지 않았습니다. <b>{o.openDays}일째</b> 게시 중입니다.{o.openDays >= LONG_OPEN && ' 1년이 넘었으니 한 번 확인해 보세요.'}</p>}
+        {cur ? (
+          <>
+            {cur.faces ? (
+              <div className="facegrid">
+                {cur.faces.map((f, i) => (
+                  <div className="bigthumb face" key={i} style={{ background: `linear-gradient(150deg, hsl(${(cur.hue + i * 40) % 360} 42% 52%), hsl(${(cur.hue + i * 40 + 40) % 360} 38% 38%))` }}>
+                    <span>{cur.brand}</span>
+                    <i className="facedir">{i === 0 ? '1면' : '2면'}{f.direction ? ` · ${f.direction}` : ''}</i>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bigthumb" style={{ background: `linear-gradient(150deg, hsl(${cur.hue} 42% 52%), hsl(${(cur.hue + 40) % 360} 38% 38%))` }}><span>{cur.brand}</span></div>
+            )}
+            <div className="statgrid">
+              <div><em>업체명</em><b>{cur.brand}</b></div>
+              <div><em>내용</em><b>{contentOf(cur)}</b></div>
+              <div><em>게시일</em><b className="mono">{cur.start}</b></div>
+              <div><em>철거 예정</em><b className="mono">{cur.end || '미정'}</b></div>
+            </div>
+            {isEditor && (
+              <button className={'btn wide' + (o.overdue ? ' danger' : ' ok')} onClick={() => onRemove(cur.id)}>철거 완료{o.overdue ? ` (+${o.overdueDays}일 지연)` : ''}</button>
+            )}
+          </>
+        ) : <p className="empty">비어있습니다 · {o.emptyDays >= 365 ? '365+' : o.emptyDays}일째</p>}
+
+        <h4>게시 이력 <span className="sub">{past.length}건</span></h4>
+        <div className="thumbrow">{past.map((p) => (<div className="tsmall" key={p.id} title={p.brand + ' ' + p.start + '~' + (p.end || '미정')}><i style={{ background: `linear-gradient(150deg, hsl(${p.hue} 40% 55%), hsl(${(p.hue + 40) % 360} 36% 40%))` }} /><em className="mono">{p.start.slice(2, 7)}</em></div>))}</div>
+        <table className="mini-t">
+          <tbody>{past.map((p) => (<tr key={p.id}><td>{p.brand}</td><td className="mono sub">{p.start} ~ {p.end || '미정'}</td><td className="r sub mono">{p.removedAt ? '철거 ' + p.removedAt.slice(5) : '—'}</td></tr>))}</tbody>
+        </table>
+
+        {isEditor && (
+          <>
+            <h4>매체 관리</h4>
+            <p className="hint">위치는 지도에서 편집 모드로 드래그하면 바로 저장됩니다.</p>
+            <button className="btn wide danger" onClick={() => onDelete(o.id)}>{o.history.length ? '이 매체 보관' : '이 매체 삭제'}</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
