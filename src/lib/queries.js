@@ -126,7 +126,7 @@ async function uploadPostingImage(path, dataUrl) {
 
 // 게시물 등록 — mediaFaces===2(웨더워리어)이면 face 배열(앞/뒤 방향+변환결과)을 받아
 // 면마다 별도 이미지를 올리고 faces(jsonb)에 담는다. 1면 매체는 기존 thumb/view 컬럼을 쓴다.
-export async function createPosting({ mediaId, brand, title, start, end, driveUrl, singleResult, faceResults }) {
+export async function createPosting({ mediaId, brand, title, start, end, driveUrl, singleResult, faceResults, installPhoto }) {
   const { data: userData } = await supabase.auth.getUser();
   const { data: inserted, error: insertError } = await supabase
     .from('postings')
@@ -164,6 +164,9 @@ export async function createPosting({ mediaId, brand, title, start, end, driveUr
     patch.thumb_path = await uploadPostingImage(`${id}/thumb.webp`, singleResult.thumb.url);
     patch.bytes_orig = singleResult.orig;
     patch.bytes_light = singleResult.view.bytes;
+  }
+  if (installPhoto) {
+    patch.install_photo_path = await uploadPostingImage(`${id}/install.webp`, installPhoto.url);
   }
 
   if (Object.keys(patch).length === 0) return mapPosting(inserted);

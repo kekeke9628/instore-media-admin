@@ -22,6 +22,9 @@ export default function AddModal({ T, media, postings, refDate, onClose, onAdd, 
   const [directions, setDirections] = useState(['', '']);
   const [conflict, setConflict] = useState(null);
   const [saving, setSaving] = useState(false);
+  // 설치 확인 사진(선택) — 홍보물 이미지와 별개로, 실제 현장에 부착됐다는 증빙용 한 장.
+  const [installPhoto, setInstallPhoto] = useState(null);
+  const [installBusy, setInstallBusy] = useState(false);
   const result = results[0];
   const busy = busyFace.some(Boolean);
 
@@ -33,6 +36,7 @@ export default function AddModal({ T, media, postings, refDate, onClose, onAdd, 
     setConflict(null);
     setResults([null, null]);
     setDirections(['', '']);
+    setInstallPhoto(null);
     const last = mediaPostings(mediaId)[0];
     if (last) setStart(last.end ? iso(Date.parse(last.end) + DAY) : refDate);
     else setStart(refDate);
@@ -62,6 +66,23 @@ export default function AddModal({ T, media, postings, refDate, onClose, onAdd, 
     img.src = url;
   };
 
+  const processInstallPhoto = (f) => {
+    setInstallBusy(true);
+    const img = new Image();
+    const url = URL.createObjectURL(f);
+    img.onload = () => {
+      const s = Math.min(1, 1200 / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * s); cv.height = Math.round(img.height * s);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      setInstallPhoto({ url: cv.toDataURL('image/webp', 0.75), w: cv.width, h: cv.height });
+      setInstallBusy(false);
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => { setInstallBusy(false); setInstallPhoto(null); };
+    img.src = url;
+  };
+
   const specRatio = useMemo(() => { const spec = m?.spec || t?.spec || ''; const n = spec.match(/(\d+)\D+(\d+)/); return n ? +n[1] / +n[2] : null; }, [m, t]);
   const mismatch = result && specRatio && Math.abs(+result.ratio - specRatio) / specRatio > 0.08;
 
@@ -78,6 +99,7 @@ export default function AddModal({ T, media, postings, refDate, onClose, onAdd, 
     return onAdd({
       mediaId, brand, title, start, end: noEnd ? null : end,
       driveUrl: drive || '#', singleResult: faceCount === 1 ? result : null, faceResults,
+      installPhoto,
     });
   };
 
@@ -110,6 +132,14 @@ export default function AddModal({ T, media, postings, refDate, onClose, onAdd, 
           </div>
           <label className="chk"><input type="checkbox" checked={noEnd} onChange={(e) => { setNoEnd(e.target.checked); setConflict(null); }} />종료일 미정 (미정 상태) — 철거 알람 대상에서 제외됩니다</label>
           <label className="fld"><span>원본 위치</span><input value={drive} onChange={(e) => setDrive(e.target.value)} placeholder="구글드라이브 링크" /></label>
+
+          <label className="fld"><span>설치 확인 사진 (선택)</span></label>
+          <div className="drop">
+            <input type="file" accept="image/*" onChange={(e) => e.target.files[0] && processInstallPhoto(e.target.files[0])} />
+            <p>현장에 실제로 부착된 모습을 한 장 남겨두면 게시물 목록에 "설치사진 ✓"로 표시됩니다.</p>
+          </div>
+          {installBusy && <p className="hint">변환 중…</p>}
+          {installPhoto && <div className="rprev"><img src={installPhoto.url} alt="" /><i className="sub">설치 확인 사진</i></div>}
 
           {conflict && (
             <div className="conflictbox">
