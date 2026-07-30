@@ -1,0 +1,25 @@
+name: 슬랙 알람
+
+on:
+  schedule:
+    # UTC 00:00 = KST 09:00 (AlertPanel.jsx 문구와 동일)
+    - cron: '0 0 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --omit=dev
+      - id: weekday
+        run: echo "is_monday=$(TZ=Asia/Seoul date +%u)" >> "$GITHUB_OUTPUT"
+      - run: node scripts/slack-alert.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SEND_WEEKLY: ${{ steps.weekday.outputs.is_monday == '1' }}
