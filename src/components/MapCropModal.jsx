@@ -191,6 +191,8 @@ export default function MapCropModal({ file, onCancel, onConfirm }) {
     const cv = document.createElement('canvas');
     cv.width = 1600; cv.height = 800;
     const ctx = cv.getContext('2d');
+    // 지도 배경을 흑백으로 눌러서 매체 핀(빨강/초록)이 도드라지게 한다.
+    ctx.filter = 'grayscale(1)';
     ctx.drawImage(
       srcImg,
       -x / scale, -y / scale, FRAME_W / scale, FRAME_H / scale,
@@ -219,7 +221,7 @@ export default function MapCropModal({ file, onCancel, onConfirm }) {
           ) : (
             <>
               <div className="cropframe" ref={frameRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
-                {srcImg && <img ref={imgElRef} src={srcImg.src} alt="" draggable={false} />}
+                {srcImg && <img ref={imgElRef} src={srcImg.src} alt="" draggable={false} style={{ filter: 'grayscale(1)' }} />}
               </div>
               <p className="hint">휠(PC)로 확대/축소, 두 손가락(모바일)으로 확대·축소, 드래그로 이동해 영역을 프레임 안에 맞추세요.</p>
             </>
