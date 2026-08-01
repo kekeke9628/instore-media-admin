@@ -15,10 +15,12 @@ import GalleryPanel from './components/GalleryPanel.jsx';
 import TimelinePanel from './components/TimelinePanel.jsx';
 import ManagePanel from './components/ManagePanel.jsx';
 import AlertPanel from './components/AlertPanel.jsx';
+import AdminsPanel from './components/AdminsPanel.jsx';
 import MediaSheet from './components/MediaSheet.jsx';
 import AddModal from './components/AddModal.jsx';
 
-const TABS = { posts: '홍보물 관리', status: '매체 현황', gallery: '게시물', timeline: '타임라인', manage: '매체 관리', alert: '알람 예정' };
+const TABS = { posts: '홍보물 관리', status: '매체 현황', gallery: '게시물', timeline: '타임라인', manage: '매체 관리', alert: '알람 예정', admins: '관리자 관리' };
+const EDITOR_ONLY_TABS = new Set(['admins']);
 
 export default function App() {
   const { session, admin, loading, authError, isEditor, signOut } = useAuth();
@@ -33,10 +35,10 @@ export default function App() {
   if (!session) return <Login initialError={authError} />;
   if (!admin) return <Unauthorized email={session.user.email} onSignOut={signOut} />;
 
-  return <AppShell admin={admin} isEditor={isEditor} onSignOut={signOut} />;
+  return <AppShell admin={admin} isEditor={isEditor} meId={session.user.id} onSignOut={signOut} />;
 }
 
-function AppShell({ admin, isEditor, onSignOut }) {
+function AppShell({ admin, isEditor, meId, onSignOut }) {
   const [refDate, setRefDate] = useState(getToday());
   const [types, setTypes] = useState([]);
   const [media, setMedia] = useState([]);
@@ -197,6 +199,7 @@ function AppShell({ admin, isEditor, onSignOut }) {
   };
 
   const ctx = { T, types, refDate, isEditor };
+  const tabEntries = Object.entries(TABS).filter(([k]) => isEditor || !EDITOR_ONLY_TABS.has(k));
 
   if (dataLoading) {
     return (
@@ -218,7 +221,7 @@ function AppShell({ admin, isEditor, onSignOut }) {
           <div className="skv bad"><em>만료</em><b>{kpi.stale}</b></div>
         </div>
         <nav>
-          {Object.entries(TABS).map(([k, v]) => (
+          {tabEntries.map(([k, v]) => (
             <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
               {v}{k === 'posts' && kpi.stale > 0 && <em className="red">{kpi.stale}</em>}
             </button>
@@ -242,7 +245,7 @@ function AppShell({ admin, isEditor, onSignOut }) {
         />
 
         <div className="tabs">
-          {Object.entries(TABS).map(([k, v]) => (
+          {tabEntries.map(([k, v]) => (
             <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{v}{k === 'posts' && kpi.stale > 0 && <em>{kpi.stale}</em>}</button>
           ))}
         </div>
@@ -258,6 +261,7 @@ function AppShell({ admin, isEditor, onSignOut }) {
               onRemoveMedia={removeMedia} onRestoreMedia={restoreMediaItem} />
           )}
           {tab === 'alert' && <AlertPanel alerts={alerts} kpi={kpi} />}
+          {tab === 'admins' && isEditor && <AdminsPanel meId={meId} />}
         </div>
       </main>
 

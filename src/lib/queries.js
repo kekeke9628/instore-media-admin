@@ -175,6 +175,41 @@ export async function createPosting({ mediaId, brand, title, start, end, driveUr
   return mapPosting(updated);
 }
 
+export async function fetchAdmins() {
+  const { data, error } = await supabase.from('admins').select('user_id, email, name, role').order('created_at');
+  if (error) throw error;
+  return data;
+}
+
+// admins 테이블은 auth.users(가입 여부)를 직접 조회할 수 없어, 이메일로 user_id를
+// 찾아주는 전용 RPC(admin_find_user_id, 012 마이그레이션)를 거친다. 아직 로그인 링크를
+// 한 번도 요청한 적 없는 이메일이면 null이 온다 — 그 경우 먼저 로그인 시도가 필요하다.
+export async function findUserIdByEmail(email) {
+  const { data, error } = await supabase.rpc('admin_find_user_id', { p_email: email });
+  if (error) throw error;
+  return data;
+}
+
+export async function addAdmin({ userId, email, name, role }) {
+  const { data, error } = await supabase
+    .from('admins')
+    .insert({ user_id: userId, email, name: name || null, role })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateAdminRole(userId, role) {
+  const { error } = await supabase.from('admins').update({ role }).eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function removeAdmin(userId) {
+  const { error } = await supabase.from('admins').delete().eq('user_id', userId);
+  if (error) throw error;
+}
+
 export async function markPostingRemoved(id, removedAt) {
   const { error } = await supabase.from('postings').update({ removed_at: removedAt, removal_source: 'manual' }).eq('id', id);
   if (error) throw error;
